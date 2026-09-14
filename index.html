@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <script>try{var __t=localStorage.getItem("bsp_theme");if(__t==="light"||__t==="dark")document.documentElement.setAttribute("data-theme",__t);}catch(e){}</script>
 <style>:root{color-scheme:light dark}body{margin:0;padding:0}img{max-width:100%}</style>
 <title>BSP StuRa</title>
@@ -72,8 +72,13 @@
 
 *{box-sizing:border-box;}
 [hidden]{display:none !important;}
-html,body{height:100%;}
+html{height:100%;overflow:hidden;overscroll-behavior:none;}
 body{
+  height:100%;
+  position:fixed;
+  inset:0;
+  width:100%;
+  overflow:hidden;
   background:var(--ground);
   color:var(--ink);
   font-family:"Source Sans 3","Segoe UI",system-ui,sans-serif;
@@ -197,6 +202,18 @@ main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .cohortbar .who{font-size:13px;font-weight:600;color:var(--blue-ink);line-height:1.3;}
 .cohortbar .chg{font-size:12px;color:var(--blue-ink);opacity:.8;white-space:nowrap;}
 
+.weeknav{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.weeknav-btn{
+  width:30px;height:30px;border-radius:8px;flex:none;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line-strong);color:var(--ink-mid);
+}
+.weeknav-btn:hover{border-color:var(--blue);color:var(--blue-ink);}
+.weeknav-label{
+  font-size:12.5px;font-weight:600;color:var(--ink-mid);
+  display:flex;align-items:center;gap:9px;
+}
+.weeknav-today{font-size:11.5px;font-weight:600;color:var(--blue-ink);}
 .days{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;}
 .daybtn{
   text-align:center;padding:8px 0 9px;border-radius:10px;
@@ -369,6 +386,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
 .shield b{color:var(--ink);font-weight:600;}
 
 /* ---------- settings ---------- */
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.sheet-head h3{margin:0;}
 .seg{display:flex;gap:6px;}
 .seg button{
   flex:1;text-align:center;border:1px solid var(--line-strong);border-radius:9px;
@@ -529,6 +548,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
   var COHORTS = generateCohorts();
   var BLOCKS = [["09:00","12:15"],["13:00","16:15"],["16:30","19:45"]];
   var DAYNAMES = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag"];
+  var MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
   var DAYSHORT = ["Mo","Di","Mi","Do","Fr"];
   var STURA_PASS = "stura2026";
 
@@ -636,17 +656,29 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
     return x;
   }
   var TODAY = new Date();
-  var MON = monday(TODAY);
-  var WEEK = [];
-  for(var i=0;i<5;i++){
-    var d = new Date(MON.getFullYear(), MON.getMonth(), MON.getDate() + i);
-    WEEK.push(d);
+  var MON0 = monday(TODAY); // Montag der aktuellen Woche, Ausgangspunkt fuer die Navigation
+  function buildWeekDates(offset){
+    var start = new Date(MON0.getFullYear(), MON0.getMonth(), MON0.getDate() + offset * 7);
+    var week = [];
+    for(var i=0;i<5;i++) week.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+    return week;
   }
+  var THIS_WEEK = buildWeekDates(0); // fest, fuer den Hochschule-Hinweis (bezieht sich immer auf "heute")
+  var weekOffset = 0;
+  var WEEK = buildWeekDates(weekOffset);
   function todayIdx(){
+    if(weekOffset !== 0) return -1;
     for(var i=0;i<5;i++){
       if(WEEK[i].getDate() === TODAY.getDate() && WEEK[i].getMonth() === TODAY.getMonth() && WEEK[i].getFullYear() === TODAY.getFullYear()) return i;
     }
     return 0;
+  }
+  function goWeek(delta){
+    weekOffset += delta;
+    WEEK = buildWeekDates(weekOffset);
+    var ti = todayIdx();
+    state.day = ti === -1 ? 0 : ti;
+    renderPlan();
   }
 
   /* ============ Stundenplan erzeugen ============ */
@@ -796,11 +828,41 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
     });
     pane.appendChild(bar);
 
+    var showChange = weekOffset === 0;
+
+    var weeknav = el("div","weeknav");
+    var prevBtn = el("button","weeknav-btn");
+    prevBtn.type = "button"; prevBtn.setAttribute("aria-label","Vorherige Woche");
+    prevBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
+    prevBtn.addEventListener("click", function(){ goWeek(-1); });
+    weeknav.appendChild(prevBtn);
+
+    var label = el("span","weeknav-label");
+    var startD = WEEK[0], endD = WEEK[4];
+    var range = startD.getMonth() === endD.getMonth()
+      ? startD.getDate() + ".–" + endD.getDate() + ". " + MONTHS[endD.getMonth()]
+      : startD.getDate() + ". " + MONTHS[startD.getMonth()] + " – " + endD.getDate() + ". " + MONTHS[endD.getMonth()];
+    label.appendChild(document.createTextNode(range));
+    if(weekOffset !== 0){
+      var today = el("button","weeknav-today","Heute");
+      today.type = "button";
+      today.addEventListener("click", function(){ goWeek(-weekOffset); });
+      label.appendChild(today);
+    }
+    weeknav.appendChild(label);
+
+    var nextBtn = el("button","weeknav-btn");
+    nextBtn.type = "button"; nextBtn.setAttribute("aria-label","Nächste Woche");
+    nextBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+    nextBtn.addEventListener("click", function(){ goWeek(1); });
+    weeknav.appendChild(nextBtn);
+    pane.appendChild(weeknav);
+
     var days = el("div","days");
     for(var d=0; d<5; d++){
       (function(d){
         var hasChange = false;
-        for(var s=0;s<state.plan[d].length;s++){ if(state.plan[d][s].status) hasChange = true; }
+        if(showChange){ for(var s=0;s<state.plan[d].length;s++){ if(state.plan[d][s].status) hasChange = true; } }
         var b = el("button","daybtn" + (d === state.day ? " on" : "") + (hasChange ? " dot" : ""));
         b.type = "button";
         b.appendChild(document.createTextNode(DAYSHORT[d]));
@@ -814,18 +876,18 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
     var sessions = state.plan[state.day];
     var line = el("div","dayline");
     line.appendChild(document.createTextNode(
-      DAYNAMES[state.day] + ", " + WEEK[state.day].getDate() + ". " +
-      ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"][WEEK[state.day].getMonth()]
+      DAYNAMES[state.day] + ", " + WEEK[state.day].getDate() + ". " + MONTHS[WEEK[state.day].getMonth()]
     ));
     line.appendChild(el("span","rule"));
     line.appendChild(document.createTextNode(sessions.length === 1 ? "1 Termin" : sessions.length + " Termine"));
     pane.appendChild(line);
 
     if(!sessions.length){
-      pane.appendChild(el("div","empty","Heute keine Veranstaltungen."));
+      pane.appendChild(el("div","empty","Keine Veranstaltungen."));
     }
     sessions.forEach(function(s){
-      var cls = "slot" + (s.status === "moved" ? " alert" : s.status === "cancelled" ? " off" : "");
+      var status = showChange ? s.status : null;
+      var cls = "slot" + (status === "moved" ? " alert" : status === "cancelled" ? " off" : "");
       var row = el("div", cls);
       var t = el("div","time");
       t.appendChild(document.createTextNode(s.from));
@@ -835,8 +897,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
       var body = el("div");
       body.appendChild(el("h3", null, s.course));
       body.appendChild(el("div","meta", "Siemensvilla · " + s.room));
-      if(s.status === "moved") body.appendChild(el("span","flag","Raum geändert · vorher " + s.prev.replace("Raum ","")));
-      if(s.status === "cancelled") body.appendChild(el("span","flag","Fällt aus"));
+      if(status === "moved") body.appendChild(el("span","flag","Raum geändert · vorher " + s.prev.replace("Raum ","")));
+      if(status === "cancelled") body.appendChild(el("span","flag","Fällt aus"));
       row.appendChild(body);
       pane.appendChild(row);
     });
@@ -861,7 +923,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
       p.appendChild(el("span","byline","Studiengangsbüro"));
       p.appendChild(el("h3", null, moved.s.course + " in " + moved.s.room));
       p.appendChild(el("p", null, "Der Raum wurde verlegt, vorher " + moved.s.prev + ". Beginn wie geplant um " + moved.s.from + " Uhr."));
-      p.appendChild(el("span","stamp", DAYNAMES[moved.d] + ", " + pad(WEEK[moved.d].getDate()) + "." + pad(WEEK[moved.d].getMonth()+1) + "."));
+      p.appendChild(el("span","stamp", DAYNAMES[moved.d] + ", " + pad(THIS_WEEK[moved.d].getDate()) + "." + pad(THIS_WEEK[moved.d].getMonth()+1) + "."));
       pane.appendChild(p);
     }
 
@@ -991,7 +1053,15 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
 
   function openSettings(){
     openSheet(function(b){
-      b.appendChild(el("h3", null, "Einstellungen"));
+      var head = el("div","sheet-head");
+      head.appendChild(el("h3", null, "Einstellungen"));
+      var xbtn = el("button","iconbtn");
+      xbtn.type = "button";
+      xbtn.setAttribute("aria-label","Schließen");
+      xbtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      xbtn.addEventListener("click", closeSheet);
+      head.appendChild(xbtn);
+      b.appendChild(head);
 
       var themeLab = el("label","fld");
       themeLab.appendChild(el("span", null, "Erscheinungsbild"));
@@ -1018,11 +1088,6 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
         $("app").hidden = true; $("onboarding").hidden = false;
       });
       b.appendChild(chg);
-
-      var cl = el("button","btn ghost","Schließen");
-      cl.type = "button";
-      cl.addEventListener("click", closeSheet);
-      b.appendChild(cl);
     });
   }
 
@@ -1264,6 +1329,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);}
 
   /* ============ Start ============ */
   function startApp(){
+    weekOffset = 0;
+    WEEK = buildWeekDates(weekOffset);
     state.plan = buildPlan(state.prog, state.cohort);
     state.day = todayIdx();
     renderPlan(); renderHS(); renderStuRa();
